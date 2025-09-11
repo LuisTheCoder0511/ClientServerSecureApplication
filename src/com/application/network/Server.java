@@ -5,29 +5,62 @@ import com.application.window.Window;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.Map;
+import java.security.*;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Server {
     public final ServerSocket serverSocket = new ServerSocket(Constants.PORT);
-    public boolean closed = false;
-    public final ScheduledExecutorService service;
-    private final Map<String, ClientHandler> clients;
-    public String text;
+    private final ScheduledExecutorService readingService;
+    private final ScheduledExecutorService writingService;
+    private final Queue<Client> clients;
+    private final Queue<String> clientMessages;
+    private final Queue<Client> removeClientQueue;
 
-    public Server() throws IOException {
-        clients = new HashMap<>();
-        service = Executors.newScheduledThreadPool(1);
-        service.scheduleAtFixedRate(() -> {
-            for (String key: clients.keySet()) {
+    public Server(Window window) throws IOException {
+        clients = new LinkedList<>();
+        clientMessages = new LinkedList<>();
+        removeClientQueue = new LinkedList<>();
+        readingService = Executors.newScheduledThreadPool(1);
+        writingService = Executors.newScheduledThreadPool(1);
+
+        readingService.scheduleAtFixedRate(() -> {
+            for (Client client: clients) {
                 try {
-                    clients.get(key).listen(text);
+                    if (client.socket.isClosed()){
+                        removeClientQueue.add(client);
+                        continue;
+                    }
+                    String line = client.read();
+                    if (line != null){
+                        clientMessages.add(line);
+                    }
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
+            }
+            Client clientToRemove;
+            while ((clientToRemove = removeClientQueue.poll()) != null){
+                clients.remove(clientToRemove);
+            }
+            System.out.println(Arrays.toString(clients.toArray()));
+        }, 0, 250, TimeUnit.MILLISECONDS);
+
+        writingService.scheduleAtFixedRate(() -> {
+            if (!window.getText().isBlank()){
+                clientMessages.add("Server: " + window.getText());
+                window.resetText();
+            }
+            String line;
+            while ((line = clientMessages.poll()) != null){
+                for (Client client: clients) {
+                    if (client.socket.isClosed()) continue;
+                    client.write(line);
+                }
+                System.out.println("Out: " + line);
+                window.pushMessage(line);
             }
         }, 0, 250, TimeUnit.MILLISECONDS);
     }
@@ -36,21 +69,25 @@ public class Server {
         try {
             Socket socket = serverSocket.accept();
             System.out.println("Accepted connection from " + socket.getInetAddress().getHostAddress());
-            clients.put(socket.getInetAddress().getHostAddress(), new ClientHandler(socket));
+            clients.add(new Client(socket));
+
         } catch (IOException e) {
             throw new RuntimeException(e);
-        } finally {
-            if (window.isClosed()) acceptRequests(window);
-            else close();
         }
+        if (window.isClosed()) close();
+        else acceptRequests(window);
     }
 
     public void close() throws IOException {
-        service.shutdownNow();
-        for (String key: clients.keySet()) {
-            clients.get(key).close();
+        readingService.shutdownNow();
+        writingService.shutdownNow();
+        for (Client client: clients) {
+            if (client.socket.isClosed()) continue;
+            client.close();
         }
+        clients.clear();
+        clientMessages.clear();
+        removeClientQueue.clear();
         serverSocket.close();
-        closed = true;
     }
 }

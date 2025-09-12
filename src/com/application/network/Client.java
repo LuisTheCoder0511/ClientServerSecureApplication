@@ -4,11 +4,6 @@ import java.io.IOException;
 import java.net.Socket;
 
 public class Client extends IOSocket {
-    public Client() throws IOException {
-        super();
-        System.out.println("Joined server!");
-    }
-
     public Client(Socket socket) throws IOException {
         super(socket);
     }

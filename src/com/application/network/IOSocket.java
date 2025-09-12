@@ -1,5 +1,8 @@
 package com.application.network;
 
+import com.application.constants.Constants;
+import com.application.interfaces.MessageListener;
+
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import java.io.*;
@@ -12,10 +15,6 @@ public abstract class IOSocket {
     protected SecretKey aesKey;
     protected MessageListener listener;
     protected Thread readerThread;
-
-    protected IOSocket() throws IOException {
-        this(new Socket(Constants.IP, Constants.PORT));
-    }
 
     protected IOSocket(Socket socket) throws IOException {
         this.socket = socket;

@@ -1,18 +1,22 @@
-package com.application.network;
+package com.application.service;
 
-import com.application.service.ServiceClass;
+import com.application.interfaces.MessageListener;
+import com.application.network.Client;
+import com.application.constants.Constants;
+import com.application.input.NetworkInput;
 import com.application.window.Window;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
+import java.net.Socket;
 import java.security.PublicKey;
 
 public class ClientService extends ServiceClass {
     private final Client client;
 
-    public ClientService(Window window) {
+    public ClientService(Window window, NetworkInput input) {
         try {
-            client = new Client();
+            client = new Client(new Socket(input.getAddress(), input.getPort()));
             PublicKey publicKey = (PublicKey) client.readObject();
             KeyGenerator keyGen = KeyGenerator.getInstance(Constants.ALG_AES);
             keyGen.init(128);

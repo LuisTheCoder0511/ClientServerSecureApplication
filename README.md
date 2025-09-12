@@ -1,2 +1,2 @@
 # ClientServerSecureApplication
-A socket programming application that (not yet implemented) uses security encryption and decryption for sending and receiving messages securely.
+A client-server application which uses asymmetric encryption to send and receive messages securely using Java Networking Sockets.

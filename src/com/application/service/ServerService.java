@@ -1,25 +1,30 @@
-package com.application.network;
+package com.application.service;
 
-import com.application.service.ServiceClass;
+import com.application.interfaces.MessageListener;
+import com.application.network.Client;
+import com.application.constants.Constants;
+import com.application.input.NetworkInput;
 import com.application.window.Window;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.*;
 import java.util.*;
 
 public class ServerService extends ServiceClass {
-    private final ServerSocket serverSocket = new ServerSocket(Constants.PORT);
+    private final ServerSocket serverSocket;
     private final Queue<Client> clients;
 
     private final PublicKey publicKey;
     private final PrivateKey privateKey;
     private final Thread thread;
 
-    public ServerService(Window window) throws IOException, NoSuchAlgorithmException {
+    public ServerService(Window window, NetworkInput input) throws IOException, NoSuchAlgorithmException {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance(Constants.ALG_RSA);
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
@@ -27,6 +32,9 @@ public class ServerService extends ServiceClass {
         privateKey = kp.getPrivate();
 
         clients = new LinkedList<>();
+        serverSocket = new ServerSocket();
+        InetSocketAddress socketAddress = new InetSocketAddress(InetAddress.getByName(input.getAddress()), input.getPort());
+        serverSocket.bind(socketAddress);
 
         thread = new Thread(() -> {
             try {

@@ -1,45 +1,58 @@
 package com.application.network;
 
-import com.application.window.Window;
-
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
 import java.io.*;
 import java.net.Socket;
 
 public abstract class IOSocket {
-    protected Socket socket;
-    protected PrintWriter printWriter;
-    protected BufferedReader bufferedReader;
+    protected final Socket socket;
+    protected final ObjectOutputStream out;
+    protected final ObjectInputStream in;
+    protected SecretKey aesKey;
+    protected MessageListener listener;
+    protected Thread readerThread;
 
-    protected void open() throws IOException {
-        open(new Socket(Constants.IP, Constants.PORT));
+    protected IOSocket() throws IOException {
+        this(new Socket(Constants.IP, Constants.PORT));
     }
 
-    protected void open(Socket socket) throws IOException {
+    protected IOSocket(Socket socket) throws IOException {
         this.socket = socket;
-        printWriter = new PrintWriter(socket.getOutputStream(), true);
-        bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        out = new ObjectOutputStream(socket.getOutputStream());
+        in = new ObjectInputStream(socket.getInputStream());
     }
 
-    protected String read() throws IOException {
-        String line = bufferedReader.readLine();
-        if (!line.isBlank()){
-            System.out.println("In: " + line);
-            return line;
+    protected synchronized void writeObject(Object object) throws IOException {
+        out.writeObject(object);
+        out.flush();
+    }
+
+    protected Object readObject() throws IOException, ClassNotFoundException {
+        return in.readObject();
+    }
+
+    protected void encryptMessage(String message) throws Exception{
+        Cipher aesCipher = Cipher.getInstance(Constants.ALG_AES);
+        aesCipher.init(Cipher.ENCRYPT_MODE, aesKey);
+        writeObject(aesCipher.doFinal(message.getBytes()));
+    }
+
+    protected String decryptMessage(byte[] encrypted) {
+        try {
+            Cipher aesCipher = Cipher.getInstance(Constants.ALG_AES);
+            aesCipher.init(Cipher.DECRYPT_MODE, aesKey);
+            return new String(aesCipher.doFinal(encrypted));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        return null;
     }
 
-    protected void write(String text){
-        printWriter.println(text.isBlank() ? "" : text);
+    protected void setMessageListener(MessageListener listener) {
+        this.listener = listener;
     }
 
     protected void close() throws IOException {
-        printWriter.close();
-        bufferedReader.close();
         socket.close();
-    }
-
-    public String getSocketAddress() {
-        return socket.getInetAddress().getHostAddress();
     }
 }

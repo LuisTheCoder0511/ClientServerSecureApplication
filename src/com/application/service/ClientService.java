@@ -4,7 +4,7 @@ import com.application.interfaces.MessageListener;
 import com.application.network.Client;
 import com.application.constants.Constants;
 import com.application.input.NetworkInput;
-import com.application.window.Window;
+import com.application.packet.PacketSMS;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -14,17 +14,17 @@ import java.security.PublicKey;
 public class ClientService extends ServiceClass {
     private final Client client;
 
-    public ClientService(Window window, NetworkInput input) {
+    public ClientService(NetworkInput input) {
         try {
             client = new Client(new Socket(input.getAddress(), input.getPort()));
             PublicKey publicKey = (PublicKey) client.readObject();
             KeyGenerator keyGen = KeyGenerator.getInstance(Constants.ALG_AES);
             keyGen.init(128);
-            client.aesKey = keyGen.generateKey();
+            client.setAESKey(keyGen.generateKey());
 
             Cipher rsaCipher = Cipher.getInstance(Constants.ALG_RSA);
             rsaCipher.init(Cipher.ENCRYPT_MODE, publicKey);
-            byte[] encryptedAESKey = rsaCipher.doFinal(client.aesKey.getEncoded());
+            byte[] encryptedAESKey = rsaCipher.doFinal(client.getAESKey().getEncoded());
 
             client.writeObject(encryptedAESKey);
         } catch (Exception e) {
@@ -32,8 +32,8 @@ public class ClientService extends ServiceClass {
         }
         client.setMessageListener(new MessageListener() {
             @Override
-            public void onMessageReceived(Client client, String message) {
-                window.pushMessage(message);
+            public void onMessageReceived(Client client, PacketSMS packetSMS) {
+                pushMessage(packetSMS);
             }
 
             @Override
@@ -45,9 +45,9 @@ public class ClientService extends ServiceClass {
     }
 
     @Override
-    public void sendMessage(String message) {
+    public void sendMessage(PacketSMS packetSMS) {
         try {
-            client.sendMessage(message);
+            client.sendMessage(packetSMS);
         } catch (Exception e) {
             close();
             throw new RuntimeException(e);

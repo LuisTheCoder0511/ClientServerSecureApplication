@@ -1,22 +1,30 @@
 package com.application.window;
 
+import com.application.packet.PacketSMS;
+import com.application.service.ServiceClass;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 public class Window implements ActionListener {
+    private final Object lock = new Object();
+
+    private final ServiceClass serviceClass;
     private final JTextField textField;
     private final Font font;
     private final JPanel panel;
-    private String text;
     private boolean closed;
     private final Dimension windowDimension;
     private final Dimension labelDimension;
 
-    public Window(String title, int width, int height) {
+    public Window(ServiceClass serviceClass, String title, int width, int height) {
+        this.serviceClass = serviceClass;
         windowDimension = new Dimension(512, 40);
         labelDimension = new Dimension(512, 30);
         font = new Font("Serif", Font.BOLD, 18);
@@ -56,6 +64,9 @@ public class Window implements ActionListener {
             @Override
             public void windowClosing(WindowEvent e) {
                 closed = true;
+                synchronized (lock) {
+                    lock.notifyAll();
+                }
             }
         });
     }
@@ -63,12 +74,21 @@ public class Window implements ActionListener {
     @Override
     public void actionPerformed(ActionEvent e) {
         if (e.getSource() == textField && !textField.getText().isBlank()) {
-            text = textField.getText();
+            String text = textField.getText();
             textField.setText("");
+
+            PacketSMS packetSMS = new PacketSMS(serviceClass.getName() + ": " + text);
+            pushMessage(packetSMS);
+            System.out.println("Packet size: " + packetSMS.getSize());
+            serviceClass.sendMessage(packetSMS);
         }
     }
 
-    public void pushMessage(String message) {
+    public void pushMessage(PacketSMS packetSMS) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("M/d/y h:mm a", Locale.getDefault());
+        String formattedTime = packetSMS.getDateTimeSent().format(formatter);
+        String message = formattedTime + " | " + packetSMS.getMessage();
+
         if (panel.getComponentCount() > 65) {
             panel.remove(panel.getComponentCount() - 1);
         }
@@ -82,16 +102,6 @@ public class Window implements ActionListener {
         panel.add(label, panel.getComponentCount() - 1);
         panel.revalidate();
         panel.repaint();
-        System.out.println(panel.getComponentCount());
-    }
-
-    public String getText() {
-        if (text == null || text.isBlank()) return "";
-        return text;
-    }
-
-    public void resetText(){
-        text = null;
     }
 
     private void fixedSize(JComponent component, Dimension size) {
@@ -100,7 +110,11 @@ public class Window implements ActionListener {
         component.setMaximumSize(size);
     }
 
-    public boolean isClosed() {
-        return closed;
+    public Object getLock() {
+        return lock;
+    }
+
+    public boolean isOpen() {
+        return !closed;
     }
 }

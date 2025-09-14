@@ -4,7 +4,7 @@ import com.application.interfaces.MessageListener;
 import com.application.network.Client;
 import com.application.constants.Constants;
 import com.application.input.NetworkInput;
-import com.application.window.Window;
+import com.application.packet.PacketSMS;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
@@ -24,7 +24,7 @@ public class ServerService extends ServiceClass {
     private final PrivateKey privateKey;
     private final Thread thread;
 
-    public ServerService(Window window, NetworkInput input) throws IOException, NoSuchAlgorithmException {
+    public ServerService(NetworkInput input) throws IOException, NoSuchAlgorithmException {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance(Constants.ALG_RSA);
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
@@ -36,63 +36,60 @@ public class ServerService extends ServiceClass {
         InetSocketAddress socketAddress = new InetSocketAddress(InetAddress.getByName(input.getAddress()), input.getPort());
         serverSocket.bind(socketAddress);
 
-        thread = new Thread(() -> {
-            try {
-                acceptRequests(window);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
+        thread = new Thread(this::acceptRequests);
         thread.start();
     }
 
-    private void acceptRequests(Window window) throws IOException {
-        Socket socket = serverSocket.accept();
-        System.out.println("Accepted connection from " + socket.getInetAddress().getHostAddress());
-        Client client = new Client(socket);
-        client.writeObject(publicKey);
+    private void acceptRequests() {
         try {
-            byte[] encryptedSecretKey = (byte[]) client.readObject();
+            Socket socket = serverSocket.accept();
+            System.out.println("Accepted connection from " + socket.getInetAddress().getHostAddress());
+            Client client = new Client(socket);
+            client.writeObject(publicKey);
+            try {
+                byte[] encryptedSecretKey = (byte[]) client.readObject();
 
-            Cipher rsaCipher = Cipher.getInstance(Constants.ALG_RSA);
-            rsaCipher.init(Cipher.DECRYPT_MODE, privateKey);
-            byte[] aesKeyBytes = rsaCipher.doFinal(encryptedSecretKey);
+                Cipher rsaCipher = Cipher.getInstance(Constants.ALG_RSA);
+                rsaCipher.init(Cipher.DECRYPT_MODE, privateKey);
+                byte[] aesKeyBytes = rsaCipher.doFinal(encryptedSecretKey);
 
-            client.aesKey = new SecretKeySpec(aesKeyBytes, Constants.ALG_AES);
-        } catch (Exception e){
-            throw new RuntimeException(e);
-        }
-        client.setMessageListener(new MessageListener() {
-            @Override
-            public void onMessageReceived(Client client, String message) {
-                window.pushMessage(message);
-                for (Client other: clients) {
-                    if (other == client) continue;
-                    try {
-                        other.sendMessage(message);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
+                client.setAESKey(new SecretKeySpec(aesKeyBytes, Constants.ALG_AES));
+            } catch (Exception e){
+                throw new RuntimeException(e);
+            }
+            client.setMessageListener(new MessageListener() {
+                @Override
+                public void onMessageReceived(Client client, PacketSMS packetSMS) {
+                    window.pushMessage(packetSMS);
+                    for (Client other: clients) {
+                        if (other == client) continue;
+                        try {
+                            other.sendMessage(packetSMS);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
                     }
                 }
-            }
 
-            @Override
-            public void onClientDisconnected(Client client) {
-                System.out.println("Client disconnected: " + client);
-                clients.remove(client);
-            }
-        });
-        client.startListening();
-        clients.add(client);
-
-        acceptRequests(window);
+                @Override
+                public void onClientDisconnected(Client client) {
+                    System.out.println("Client disconnected: " + client);
+                    clients.remove(client);
+                }
+            });
+            client.startListening();
+            clients.add(client);
+            if (window.isOpen()) acceptRequests();
+        } catch (IOException e){
+            System.err.println("Server Closed");
+        }
     }
 
     @Override
-    public void sendMessage(String message) {
+    public void sendMessage(PacketSMS packetSMS) {
         try {
             for (Client client : clients) {
-                client.sendMessage(message);
+                client.sendMessage(packetSMS);
             }
         } catch (Exception e) {
             close();
@@ -104,7 +101,7 @@ public class ServerService extends ServiceClass {
     public void close() {
         try {
             for (Client client : clients) {
-                if (client.socket.isClosed()) continue;
+                if (client.isClosed()) continue;
                 client.close();
             }
             serverSocket.close();

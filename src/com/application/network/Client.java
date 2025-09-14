@@ -1,5 +1,9 @@
 package com.application.network;
 
+import com.application.interfaces.MessageListener;
+import com.application.packet.PacketSMS;
+
+import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.net.Socket;
 
@@ -14,9 +18,9 @@ public class Client extends IOSocket {
                 while (!socket.isClosed()) {
                     Object object = in.readObject();
                     if (!(object instanceof byte[] encrypted)) continue;
-                    String message = decryptMessage(encrypted);
+                    PacketSMS packetSMS = readMessage(encrypted);
                     if (listener != null) {
-                        listener.onMessageReceived(this, message);
+                        listener.onMessageReceived(this, packetSMS);
                     }
                 }
             } catch (Exception e) {
@@ -29,18 +33,36 @@ public class Client extends IOSocket {
         readerThread.start();
     }
 
-    public void sendMessage(String message) throws Exception {
-        encryptMessage(message);
+    public void sendMessage(PacketSMS packetSMS) throws Exception {
+        encryptMessage(packetSMS);
+    }
+
+    private PacketSMS readMessage(byte[] encrypted) {
+        PacketSMS packetSMS = (PacketSMS) decryptMessage(encrypted);
+        System.out.println("Packet size: " + packetSMS.getSize());
+        return packetSMS;
     }
 
     @Override
-    protected synchronized void writeObject(Object object) throws IOException {
+    public synchronized void writeObject(Object object) throws IOException {
         super.writeObject(object);
     }
 
     @Override
-    protected Object readObject() throws IOException, ClassNotFoundException {
+    public Object readObject() throws IOException, ClassNotFoundException {
         return super.readObject();
+    }
+
+    public SecretKey getAESKey(){
+        return aesKey;
+    }
+
+    public void setAESKey(SecretKey key){
+        aesKey = key;
+    }
+
+    public void setMessageListener(MessageListener listener) {
+        super.setMessageListener(listener);
     }
 
     public void close() throws IOException {
